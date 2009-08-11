@@ -6,6 +6,34 @@ Installation
 ------------
 Copy tunnel into your PATH.
 
+Write a .tunnelrc file in your home directory.  Here's an example.
+
+Tunnels:
+  Default:
+    th:		  example.com	# the host to tunnel with
+    autossh:      autossh    	# path to autossh, if you have it
+    autossh_port: 30000         # port to use for autossh
+    autossh_poll: 300           # how many seconds between trying to
+                                #   reconnect
+
+  # An example of using SSH as a SOCKS proxy
+  # on localhost:1080.  IM, IRC, web browsers... lots of things
+  # can talk through a SOCKS proxy
+  socks:
+    dynamic: 1		# tell SSH to run as a SOCKS proxy
+    lp:      1080 	# local port to run on
+
+  # Tunnel your outgoing mail connection to Gmail
+  # handy for networks which block outgoing mail
+  outgoing_gmail:
+    lp:      587
+    rh:      smtp.gmail.com
+
+  # Tunnel to an SVN server
+  svn:
+    lp:      3690
+    rh:      svn.example.com
+ 
 
 Requirements
 ------------
