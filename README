@@ -1,0 +1,18 @@
+This is a program to make generating SSH tunnels easier.  It allows
+you to configure many tunnels using a .tunnelrc configuration file.
+It also makes use of autossh to keep the tunnels alive.
+
+
+Requirements:
+
+autossh
+http://www.harding.motd.ca/autossh/
+
+Perl 5.8 or up
+
+The Perl modules...
+  autodie
+  http://search.cpan.org/dist/autodie
+
+  YAML::Any
+  http://search.cpan.org/dist/YAML
