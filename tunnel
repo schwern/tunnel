@@ -1,0 +1,107 @@
+#!/usr/local/bin/perl -w
+
+use strict;
+use YAML::Any qw(LoadFile);
+use autodie;
+use IO::Socket::INET;
+
+my $All_Config = read_config();
+
+my $Groups   = $All_Config->{Groups};
+my $Tunnels  = $All_Config->{Tunnels};
+my $Default  = delete $All_Config->{Tunnels}{Default};
+
+for my $key (keys %$Groups) {
+    my $val = $Groups->{$key};
+
+    if( my($not, $regex, $modifiers) = $val =~ m{^(not|\!)? \s* /(.*)/(\w*) \s* $}sx ) {
+        $Groups->{$key} = {};
+        $Groups->{$key}{regex} = $modifiers ? qr{(?$modifiers)$regex} : qr{$regex};
+        $Groups->{$key}{not}   = $not ? 1 : 0;
+    }
+}
+
+for my $key (grep { !ref $Groups->{$_} } keys %$Groups) {
+    my $val = $Groups->{$key};
+    $Groups->{$key} = $Groups->{$val};
+}
+
+for my $key (keys %$Groups) {
+    my($not, $regex) = ($Groups->{$key}{not}, $Groups->{$key}{regex});
+    $Groups->{$key} = [grep { $not ? !m/$regex/ : m/$regex/ } keys %$Tunnels];
+}
+
+    
+
+# Set some sensible default defaults.
+$Default->{sp} ||= 22;
+$Default->{rh} ||= 'localhost';
+$Default->{u}  ||= $ENV{USER};
+$Default->{ssh} ||= 'ssh';
+
+
+my @tunnels = @ARGV ? @ARGV : "Default";
+@tunnels = map { $Groups->{$_} ? @{$Groups->{$_}} : $_ } @tunnels;
+
+
+foreach my $tunnel (@tunnels) {
+    my $tinfo = $Tunnels->{$tunnel};
+
+    unless( $tinfo ) {
+        warn "There is no tunnel or group $tunnel!\n";
+        next;
+    }
+
+    $tinfo->{rp} ||= $tinfo->{lp};
+    for my $key (grep !/^autossh_port/, keys %$Default) {
+        $tinfo->{$key} ||= $Default->{$key};
+    }
+
+    my $ssh = $tinfo->{ssh};
+    if( $tinfo->{autossh} ) {
+        my $port = $tinfo->{autossh_port} || next_autossh_port();
+        $ssh = "AUTOSSH_POLL=$tinfo->{autossh_poll} $tinfo->{autossh} -M$port";
+    }
+
+    my $tunnel_cmd;
+    if( $tinfo->{dynamic} ) {
+        $tunnel_cmd = sprintf "$ssh -f -l %s -p %d -D %d -N %s",
+                              @{$tinfo}{qw(u sp lp th)};
+    }
+    else {
+        $tunnel_cmd = sprintf "$ssh -f -l %s -p %d -N -L %d:%s:%d %s",
+                              @{$tinfo}{qw(u sp lp rh rp th)};
+    }
+
+    my @running_pids = map { /^\s*(\d+)/; $1 } 
+                       grep /\Q$tunnel_cmd\E$/, `ps wwwx`;
+    warn "Killing existing tunnels: @running_pids\n" if @running_pids;
+    kill 15, $_ for @running_pids;
+
+    warn "Tunneling $tunnel.\n";
+    warn "$tunnel_cmd\n";
+    system $tunnel_cmd;
+
+    if( $? ) {
+        warn sprintf "  Tunnelling failed.  Exited with %d.\n", $? >> 8;
+        next;
+    }
+
+    $tinfo->{extra}->() if $tinfo->{extra};
+}
+
+
+sub next_autossh_port {
+    my $port = $Default->{autossh_port};
+    $Default->{autossh_port} += 2;
+
+    return $port;
+}
+
+
+sub read_config {
+    my $file = "$ENV{HOME}/.tunnelrc";
+    die "Please set up your tunnels in $file.\n" unless -e $file;
+
+    return LoadFile($file);
+}
