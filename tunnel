@@ -40,10 +40,12 @@ $Default->{sp} ||= 22;
 $Default->{rh} ||= 'localhost';
 $Default->{u}  ||= $ENV{USER};
 $Default->{ssh} ||= 'ssh';
+$Default->{autossh_poll} = 300 unless defined $Default->{autossh_poll};
+$Default->{autossh_port} ||= 30000;
 
 
 my @tunnels = @ARGV ? @ARGV : "Default";
-@tunnels = map { $Groups->{$_} ? @{$Groups->{$_}} : $_ } @tunnels;
+@tunnels = map { defined $Groups->{$_} ? @{$Groups->{$_}} : $_ } @tunnels;
 
 
 foreach my $tunnel (@tunnels) {
@@ -55,14 +57,20 @@ foreach my $tunnel (@tunnels) {
     }
 
     $tinfo->{rp} ||= $tinfo->{lp};
-    for my $key (grep !/^autossh_port/, keys %$Default) {
-        $tinfo->{$key} ||= $Default->{$key};
+    for my $key (keys %$Default) {
+        $tinfo->{$key} = $Default->{$key} unless defined $tinfo->{$key};
     }
 
     my $ssh = $tinfo->{ssh};
     if( $tinfo->{autossh} ) {
-        my $port = $tinfo->{autossh_port} || next_autossh_port();
-        $ssh = "AUTOSSH_POLL=$tinfo->{autossh_poll} $tinfo->{autossh} -M$port";
+        $ssh = $tinfo->{autossh};
+        if( $tinfo->{autossh_poll} ) {
+            my $port = $tinfo->{autossh_port} || next_autossh_port();
+            $ssh = "AUTOSSH_POLL=$tinfo->{autossh_poll} $ssh -M$port";
+        }
+        else {
+            $ssh .= " -M0";
+        }
     }
 
     my $tunnel_cmd;
