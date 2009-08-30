@@ -65,7 +65,7 @@ foreach my $tunnel (@tunnels) {
     if( $tinfo->{autossh} ) {
         $ssh = $tinfo->{autossh};
         if( $tinfo->{autossh_poll} ) {
-            my $port = $tinfo->{autossh_port} || next_autossh_port();
+            my $port = find_next_autossh_port($tinfo);
             $ssh = "AUTOSSH_POLL=$tinfo->{autossh_poll} $ssh -M$port";
         }
         else {
@@ -102,16 +102,47 @@ foreach my $tunnel (@tunnels) {
 
 
 sub next_autossh_port {
-    my $port = $Default->{autossh_port};
-    $Default->{autossh_port} += 2;
+    my $tinfo = shift;
+
+    my $port = $tinfo->{autossh_port};
+    $tinfo->{autossh_port} += 2;
 
     return $port;
 }
 
+
+# autossh uses a pair of side by side ports, both must be available
+sub find_next_autossh_port {
+    my $tinfo = shift;
+
+    FIND: for(1..1000) {
+        my $port = next_autossh_port($tinfo);
+        for my $p ($port, $port+1) {
+            next FIND unless is_port_available($p);
+        }
+
+        return $port;
+    }
+
+    return 0;
+}
 
 sub read_config {
     my $file = "$ENV{HOME}/.tunnelrc";
     die "Please set up your tunnels in $file.\n" unless -e $file;
 
     return LoadFile($file);
+}
+
+
+sub is_port_available {
+    my $port = shift;
+
+    require IO::Socket::INET;
+
+    my $socket = IO::Socket::INET->new(
+        LocalPort       => $port
+    );
+
+    return $socket ? 1 : 0;
 }
